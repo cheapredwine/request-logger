@@ -1,11 +1,19 @@
 /**
  * API Gateway Worker
  *
- * Transparently intercepts requests to gateway.jsherron.com/api/*
- * Logs them, then forwards to a configurable backend.
+ * Transparently intercepts requests and logs them.
+ * Forwards to a configurable backend via service binding.
  *
  * Architecture:
- * Client → gateway.jsherron.com/api/* → This Worker → [LOGGED] → BACKEND (configurable)
+ * Client → gateway.jsherron.com/api/v2/products?id=123 → This Worker → [LOGGED]
+ *                                                              ↓
+ *                                                    Service Binding
+ *                                                              ↓
+ *                                            Backend (/api/v2/products?id=123)
+ *                                                              ↓
+ *                                                     [Response]
+ *                                                              ↓
+ *                                                       [RETURNED]
  */
 
 export interface Env {
@@ -18,8 +26,6 @@ export interface Env {
   SIEM_STREAMING_MODE: string;
   SIEM_ENDPOINT?: string;
   SIEM_API_KEY?: string;
-  LOG_PATH_PREFIX: string;
-  SKIP_PATHS: string;
 
   // Encryption
   ENABLE_ENCRYPTION: string;
@@ -36,26 +42,18 @@ export interface LogEntry {
   headers: Record<string, string>;
   bodyPreview: string;
   bodyLength: number;
-  logged: boolean;
-  skipReason?: string;
 }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = crypto.randomUUID();
-    const url = new URL(request.url);
-
-    // Check if this path should be logged
-    const shouldLog = shouldLogPath(url.pathname, env);
 
     // Capture request data BEFORE any async operations
     // (Service binding fetch is async, so we must capture first)
-    const logEntry = await captureRequest(request, env, requestId, shouldLog);
+    const logEntry = await captureRequest(request, env, requestId);
 
-    // Log asynchronously if needed
-    if (shouldLog.log) {
-      ctx.waitUntil(processLogEntry(logEntry, requestId, env));
-    }
+    // Log asynchronously
+    ctx.waitUntil(processLogEntry(logEntry, requestId, env));
 
     // Forward to configured backend
     const backendResponse = await forwardToBackend(request, env, requestId);
@@ -63,22 +61,20 @@ export default {
   },
 };
 
-interface LogDecision {
-  log: boolean;
-  reason?: string;
-}
-
 /**
  * Forward request to configured backend via service binding
- * Change the service name in wrangler.toml to switch backends
+ * Preserves the original path and query string
  */
 async function forwardToBackend(
   request: Request,
   env: Env,
   requestId: string
 ): Promise<Response> {
-  const backendPath = mapToBackendEndpoint(request.method);
-  const backendUrl = `http://internal${backendPath}`;
+  const url = new URL(request.url);
+  
+  // Preserve the full original path and query string
+  // Just change the origin to the backend service
+  const backendUrl = `http://internal${url.pathname}${url.search}`;
 
   const backendRequest = new Request(backendUrl, request);
   backendRequest.headers.delete('host');
@@ -95,48 +91,10 @@ async function forwardToBackend(
   }
 }
 
-/**
- * Map HTTP methods to backend endpoints
- * This is useful for services like httpbin/flarebin that have method-specific endpoints
- */
-function mapToBackendEndpoint(method: string): string {
-  // Map HTTP methods to common endpoints
-  // Override this logic or make it configurable as needed
-  const methodEndpoints: Record<string, string> = {
-    'GET': '/get',
-    'POST': '/post',
-    'PUT': '/put',
-    'PATCH': '/patch',
-    'DELETE': '/delete',
-  };
-
-  return methodEndpoints[method] || `/${method.toLowerCase()}`;
-}
-
-function shouldLogPath(pathname: string, env: Env): LogDecision {
-  const prefix = env.LOG_PATH_PREFIX || '/api/';
-
-  // Must match the prefix
-  if (!pathname.startsWith(prefix)) {
-    return { log: false, reason: 'path_prefix_mismatch' };
-  }
-
-  // Check skip paths
-  const skipPaths = env.SKIP_PATHS ? env.SKIP_PATHS.split(',') : [];
-  for (const skipPath of skipPaths) {
-    if (pathname === skipPath || pathname.startsWith(skipPath + '/')) {
-      return { log: false, reason: `path_excluded:${skipPath}` };
-    }
-  }
-
-  return { log: true };
-}
-
 async function captureRequest(
   request: Request,
   env: Env,
-  requestId: string,
-  shouldLog: LogDecision
+  requestId: string
 ): Promise<LogEntry> {
   const url = new URL(request.url);
   const maxBytes = parseInt(env.MAX_BODY_BYTES || '400', 10);
@@ -147,46 +105,39 @@ async function captureRequest(
     headers[key] = value;
   });
 
-  // Capture body preview (only if logging)
+  // Capture body preview
   let bodyPreview = '';
   let bodyLength = 0;
 
-  if (shouldLog.log) {
+  try {
+    const clonedRequest = request.clone();
+    const bodyBuffer = await clonedRequest.arrayBuffer();
+    bodyLength = bodyBuffer.byteLength;
+    const previewBuffer = bodyBuffer.slice(0, maxBytes);
+
     try {
-      const clonedRequest = request.clone();
-      const bodyBuffer = await clonedRequest.arrayBuffer();
-      bodyLength = bodyBuffer.byteLength;
-      const previewBuffer = bodyBuffer.slice(0, maxBytes);
-
-      try {
-        const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
-        bodyPreview = decoder.decode(previewBuffer);
-      } catch {
-        bodyPreview = `[BASE64]: ${btoa(String.fromCharCode(...new Uint8Array(previewBuffer)))}`;
-      }
-
-      if (bodyLength > maxBytes) {
-        bodyPreview += `... [truncated, total: ${bodyLength} bytes]`;
-      }
-    } catch (error) {
-      bodyPreview = `[Error reading body: ${error}]`;
+      const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
+      bodyPreview = decoder.decode(previewBuffer);
+    } catch {
+      bodyPreview = `[BASE64]: ${btoa(String.fromCharCode(...new Uint8Array(previewBuffer)))}`;
     }
-  }
 
-  // Determine where we're forwarding to
-  const backendPath = mapToBackendEndpoint(request.method);
+    if (bodyLength > maxBytes) {
+      bodyPreview += `... [truncated, total: ${bodyLength} bytes]`;
+    }
+  } catch (error) {
+    bodyPreview = `[Error reading body: ${error}]`;
+  }
 
   return {
     timestamp: new Date().toISOString(),
     requestId,
     originalUrl: request.url,
-    forwardedTo: `backend:${backendPath}`,
+    forwardedTo: `backend:${url.pathname}${url.search}`,
     method: request.method,
     headers,
     bodyPreview,
     bodyLength,
-    logged: shouldLog.log,
-    skipReason: shouldLog.reason,
   };
 }
 
@@ -224,7 +175,6 @@ async function sendToSIEM(logEntry: LogEntry, env: Env): Promise<boolean> {
   // Encrypt if enabled
   if (env.ENABLE_ENCRYPTION === 'true' && env.ENCRYPTION_PUBLIC_KEY) {
     // Encryption implementation would go here
-    // For now, just log that encryption is requested
     console.log(`[ENCRYPTION] Encryption requested but not implemented in gateway`);
   }
 
