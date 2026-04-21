@@ -7,11 +7,16 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.4.0",
     "@cloudflare/workers-types": "^4.20240423.0",
     "typescript": "^5.4.5",
+    "vitest": "^1.5.0",
     "wrangler": "^3.55.0"
   }
 }
