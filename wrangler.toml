@@ -27,3 +27,19 @@ ENCRYPTION_MODE = "inline"
 # SIEM_ENDPOINT = ""           # REQUIRED for stream mode - where to send logs
 # SIEM_API_KEY = ""            # Optional - auth token for SIEM
 # ENCRYPTION_PUBLIC_KEY = ""   # Required if ENABLE_ENCRYPTION=true
+
+# Observability - ensure worker logs are enabled
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
