@@ -1,0 +1,27 @@
+name = "request-logger"
+main = "src/index.ts"
+compatibility_date = "2024-04-23"
+
+# NOTE: This worker uses NO persistent storage.
+# All data is kept in-memory only and lost on worker restart.
+# Stream mode sends logs to SIEM immediately for minimal data loss.
+
+[vars]
+# Where to forward requests (optional - returns 200 OK if not set)
+UPSTREAM_URL = ""
+
+# Logging configuration
+MAX_BODY_BYTES = "400"
+
+# Streaming mode: 'stream' (send immediately) or 'buffer' (batch to console)
+# RECOMMENDED: 'stream' for production (lower data loss)
+SIEM_STREAMING_MODE = "stream"
+
+# Encryption (optional but recommended for sensitive data)
+ENABLE_ENCRYPTION = "false"
+ENCRYPTION_MODE = "inline"
+
+# REQUIRED SECRETS (use `wrangler secret put` to set):
+# SIEM_ENDPOINT = ""           # REQUIRED for stream mode - where to send logs
+# SIEM_API_KEY = ""            # Optional - auth token for SIEM
+# ENCRYPTION_PUBLIC_KEY = ""   # Required if ENABLE_ENCRYPTION=true
