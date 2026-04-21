@@ -11,5 +11,8 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "request-logger/src/**/*",
+    "api-gateway/src/**/*"
+  ]
 }
