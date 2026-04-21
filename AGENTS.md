@@ -219,12 +219,60 @@ Use the private key to decrypt:
 
 ## Development Workflow
 
-1. **Make changes** in the appropriate worker directory
-2. **Type check**: `npm run typecheck`
-3. **Unit test**: `npm test`
-4. **Deploy**: `npm run deploy:logger` or `npm run deploy:gateway`
-5. **Live test**: `npm run demo`
-6. **Commit**: Follow conventional commits (feat:, fix:, docs:, etc.)
+### Before Committing ANY Changes
+
+**Required steps for api-gateway:**
+```bash
+# 1. Make your changes to api-gateway/src/index.ts
+
+# 2. Type check
+npm run typecheck
+
+# 3. Run unit tests
+npm test
+
+# 4. Deploy to workers.dev
+npm run deploy:gateway
+
+# 5. VALIDATE LIVE DEPLOYMENT (CRITICAL)
+npm run validate:gateway:dev
+# This tests the ACTUAL deployed worker with real HTTP requests
+# Must pass before committing!
+
+# 6. Only if validation passes, commit
+git add -A
+git commit -m "feat: your changes"
+```
+
+### For Custom Domain (Production)
+
+After workers.dev validation passes:
+```bash
+# Deploy to custom domain
+npm run deploy:gateway
+
+# Validate production deployment
+npm run validate:gateway
+
+# Check logs
+wrangler tail api-gateway
+```
+
+### Shortcut
+```bash
+# Run all checks (typecheck + test + validate)
+npm run precommit
+```
+
+### Never Commit Without Testing
+
+The `validate:gateway:dev` script tests:
+- ✅ GET requests with query params preserved
+- ✅ POST requests with JSON body preserved
+- ✅ All HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- ✅ Custom headers preserved
+
+**If validation fails, fix the issue before committing!**
 
 ## Security Considerations
 
