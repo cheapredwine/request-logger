@@ -2,6 +2,7 @@ name = "request-logger"
 main = "src/index.ts"
 compatibility_date = "2024-04-23"
 compatibility_flags = ["nodejs_compat"]
+account_id = "1ddebf6f9507d3fc9052158be9d42dee"
 
 # NOTE: This worker uses NO persistent storage.
 # All data is kept in-memory only and lost on worker restart.
