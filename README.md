@@ -114,6 +114,34 @@ wrangler deploy
 | `ENABLE_ENCRYPTION` | Enable encryption | `false` |
 | `ENCRYPTION_MODE` | `inline` or `service` | `inline` |
 
+## Testing Without a SIEM (Dry-Run Mode)
+
+If you don't have a SIEM endpoint yet, you can test the logger in **dry-run mode**. Just leave `SIEM_ENDPOINT` unset:
+
+```toml
+# wrangler.toml
+SIEM_STREAMING_MODE = "stream"
+# Don't set SIEM_ENDPOINT - logs will be printed to console
+```
+
+Then watch the logs:
+```bash
+wrangler tail
+```
+
+Generate some traffic:
+```bash
+node scripts/generate-traffic.js -u https://your-worker.workers.dev -c 5 --method POST --payload-size 500
+```
+
+You'll see output like:
+```
+[SIEM STUB][uuid] Would send to SIEM:
+{"timestamp":"2024-01-15T...","requestId":"...","url":"...","method":"POST","headers":{...},"bodyPreview":"{\"timestamp\":\"...\"...","bodyLength":500}
+```
+
+This shows exactly what would be sent to your SIEM, including the full request body preview.
+
 ## Data Loss & Monitoring
 
 Since this uses **zero persistent storage**, logs can be lost:
@@ -150,11 +178,36 @@ Decrypt with your private key:
 // 3. Parse JSON
 ```
 
+## Traffic Generator
+
+Use the included script to generate test traffic:
+
+```bash
+# Generate 100 requests
+node scripts/generate-traffic.js -u https://your-worker.workers.dev
+
+# Generate 1000 requests with 50 concurrent connections
+node scripts/generate-traffic.js -u https://your-worker.workers.dev -c 1000 --concurrency 50
+
+# POST requests with 500 byte payload
+node scripts/generate-traffic.js -u https://your-worker.workers.dev --method POST --payload-size 500
+
+# All options
+node scripts/generate-traffic.js -u <url> \
+  [-c, --count <number>] \
+  [--concurrency <number>] \
+  [--delay <ms>] \
+  [--method <GET|POST|PUT|PATCH|DELETE|mixed>] \
+  [--payload-size <bytes|random>] \
+  [--no-headers]
+```
+
 ## Development
 
 ```bash
 npm run dev       # Local development
 npm run typecheck # Type checking
+npm test          # Run tests
 wrangler deploy   # Deploy
 ```
 
