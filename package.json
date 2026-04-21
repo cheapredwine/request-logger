@@ -8,9 +8,10 @@
     "deploy": "wrangler deploy",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run test/unit",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:live": "vitest run test/integration/live.test.ts"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.4.0",
