@@ -142,6 +142,23 @@ You'll see output like:
 
 This shows exactly what would be sent to your SIEM, including the full request body preview.
 
+## Demo
+
+Run the demo to see the logger in action:
+
+```bash
+# Run demo against the deployed worker
+npm run demo
+
+# Or against a custom URL
+npm run demo -- https://your-worker.workers.dev
+```
+
+This will:
+1. Send test requests with realistic payloads (JSON, form data, etc.)
+2. Show you what to look for in `wrangler tail`
+3. Verify body capture is working correctly
+
 ## Data Loss & Monitoring
 
 Since this uses **zero persistent storage**, logs can be lost:

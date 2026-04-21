@@ -11,7 +11,8 @@
     "test": "vitest run test/unit",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:live": "vitest run test/integration/live.test.ts"
+    "test:live": "vitest run test/integration/live.test.ts",
+    "demo": "node scripts/test-live.js"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.4.0",
