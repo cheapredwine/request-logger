@@ -8,11 +8,14 @@
     "deploy:logger": "cd request-logger && wrangler deploy",
     "deploy:gateway": "cd api-gateway && wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run test/unit",
+    "test": "vitest run request-logger/test/unit",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:live": "vitest run test/integration/live.test.ts",
-    "demo": "node scripts/test-live.js"
+    "test:live": "vitest run request-logger/test/integration/live.test.ts",
+    "validate:gateway": "node scripts/validate-deployment.js https://gateway.jsherron.com",
+    "validate:gateway:dev": "node scripts/validate-deployment.js https://api-gateway.jsherron-test-account.workers.dev",
+    "demo": "node scripts/test-live.js",
+    "precommit": "npm run typecheck && npm run test && npm run validate:gateway:dev"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.4.0",

@@ -5,23 +5,16 @@ A transparent API gateway that logs requests and forwards them to a backend serv
 ## How It Works
 
 ```
-Client → gateway.jsherron.com/api/v1/users → This Worker → [LOGGED]
-                                                  ↓
+Client → gateway.jsherron.com/path → This Worker → [LOGGED]
+                                              ↓
                                     Service Binding
-                                                  ↓
-                                          Backend
-                                                  ↓
-                                       [Response]
-                                                  ↓
-                                          [RETURNED]
+                                              ↓
+                                       Backend
+                                              ↓
+                                    [Response]
+                                              ↓
+                                        [RETURNED]
 ```
-
-**HTTP Method Mapping:**
-- `POST` → backend `/post`
-- `GET` → backend `/get`
-- `PUT` → backend `/put`
-- `PATCH` → backend `/patch`
-- `DELETE` → backend `/delete`
 
 ## Configuration
 
@@ -43,25 +36,97 @@ To switch backends, just change the `service` name and redeploy:
 ## Deployment
 
 ```bash
-# From the api-gateway directory
 cd api-gateway
-
-# Deploy
 wrangler deploy
-
-# DNS route is automatic via wrangler.toml routes config
 ```
 
-## Testing
+## Usage Examples
+
+### GET Request with Query Parameters
 
 ```bash
-# This request gets logged and forwarded to backend/post
-curl https://api-gateway.jsherron-test-account.workers.dev/api/v1/users \
-  -H "Content-Type: application/json" \
-  -d '{"name":"test","email":"test@example.com"}'
+curl -X GET "https://gateway.jsherron.com/get?id=123&category=electronics" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer test-token-456"
+```
 
-# View logs
+**Expected Response:**
+```json
+{
+  "args": {
+    "id": "123",
+    "category": "electronics"
+  },
+  "headers": {
+    "accept": "application/json",
+    "authorization": "Bearer test-token-456"
+  },
+  "method": "GET",
+  "url": "http://internal/get?id=123&category=electronics"
+}
+```
+
+### POST Request with JSON Body
+
+```bash
+curl -X POST "https://gateway.jsherron.com/post" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: test-123" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "admin"
+  }'
+```
+
+**Expected Response:**
+```json
+{
+  "args": {},
+  "data": "{\"name\": \"John Doe\", \"email\": \"john@example.com\", \"role\": \"admin\"}",
+  "json": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "admin"
+  },
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "test-123"
+  },
+  "method": "POST",
+  "url": "http://internal/post"
+}
+```
+
+### Workers.dev URL (Alternative)
+
+If custom domain DNS hasn't propagated yet:
+
+```bash
+curl -X POST "https://api-gateway.jsherron-test-account.workers.dev/post" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "data"}'
+```
+
+## View Logs
+
+```bash
 wrangler tail api-gateway
+```
+
+## Log Format
+
+```json
+{
+  "timestamp": "2026-04-21T...",
+  "requestId": "uuid",
+  "originalUrl": "https://gateway.jsherron.com/get?id=123",
+  "forwardedTo": "backend:/get?id=123",
+  "method": "GET",
+  "headers": {...},
+  "bodyPreview": "",
+  "bodyLength": 0
+}
 ```
 
 ## Switching Backends
@@ -76,21 +141,6 @@ wrangler deploy
 # Done! All traffic now goes to the new backend
 ```
 
-## Log Format
-
-```json
-{
-  "timestamp": "2026-04-21T...",
-  "requestId": "uuid",
-  "originalUrl": "https://gateway.jsherron.com/api/v1/users",
-  "forwardedTo": "backend:/post",
-  "method": "POST",
-  "headers": {...},
-  "bodyPreview": "{\"name\":\"test\"...",
-  "bodyLength": 45
-}
-```
-
 ## Architecture
 
 This gateway demonstrates **transparent interception**:
@@ -98,7 +148,7 @@ This gateway demonstrates **transparent interception**:
 2. Cloudflare routes to this Worker
 3. Worker captures request synchronously
 4. Worker logs asynchronously
-5. Worker forwards to backend via service binding
+5. Worker forwards to backend via service binding (preserving full path and query)
 6. Backend's response returns to client
 
 The client is unaware of the logging - it just sees the backend response.
