@@ -69,15 +69,15 @@ wrangler deploy
 
 ```bash
 # This request gets logged and forwarded to backend/post
-curl https://gateway.jsherron.com/api/v1/users \
+curl https://api-gateway.jsherron-test-account.workers.dev/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{"name":"test","email":"test@example.com"}'
 
 # This request is forwarded but NOT logged (health check)
-curl https://gateway.jsherron.com/api/health
+curl https://api-gateway.jsherron-test-account.workers.dev/api/health
 
 # View logs
-wrangler tail
+wrangler tail api-gateway
 ```
 
 ## Switching Backends
