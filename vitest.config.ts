@@ -5,7 +5,7 @@ export default defineConfig({
     pool: '@cloudflare/vitest-pool-workers',
     poolOptions: {
       workers: {
-        wrangler: { configPath: './wrangler.toml' },
+        wrangler: { configPath: './request-logger/wrangler.toml' },
       },
     },
   },
