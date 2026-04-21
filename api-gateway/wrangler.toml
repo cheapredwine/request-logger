@@ -1,0 +1,49 @@
+name = "api-gateway"
+main = "src/index.ts"
+compatibility_date = "2024-04-23"
+compatibility_flags = ["nodejs_compat"]
+account_id = "1ddebf6f9507d3fc9052158be9d42dee"
+
+# Route: Intercept traffic to gateway.jsherron.com/api/*
+routes = [
+  { pattern = "gateway.jsherron.com/api/*", zone_name = "jsherron.com" }
+]
+
+# Service binding to backend service
+# Change this to point to any Worker or service
+[[services]]
+binding = "BACKEND"
+service = "flarebin"  # Change this to your target service name
+
+[vars]
+# Backend configuration
+# Change the service name in [[services]] section above to switch backends
+
+[vars]
+# Logging configuration
+MAX_BODY_BYTES = "400"
+SIEM_STREAMING_MODE = "stream"
+
+# Path filtering
+LOG_PATH_PREFIX = "/api/"
+SKIP_PATHS = "/api/health,/api/metrics,/api/static"
+
+# Encryption (optional)
+ENABLE_ENCRYPTION = "false"
+ENCRYPTION_MODE = "inline"
+
+# REQUIRED SECRETS (use `wrangler secret put`):
+# SIEM_ENDPOINT = ""           # Optional - for streaming logs
+# SIEM_API_KEY = ""            # Optional - auth token
+# ENCRYPTION_PUBLIC_KEY = ""   # Required if ENABLE_ENCRYPTION=true
+
+# Observability
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
