@@ -1,12 +1,12 @@
 {
   "name": "request-logger",
   "version": "1.0.0",
-  "description": "Cloudflare Workers request logger with optional encryption",
-  "main": "src/index.ts",
+  "description": "Cloudflare Workers request logging with zero persistent storage",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "lint": "eslint src/",
+    "dev:logger": "cd request-logger && wrangler dev",
+    "dev:gateway": "cd api-gateway && wrangler dev",
+    "deploy:logger": "cd request-logger && wrangler deploy",
+    "deploy:gateway": "cd api-gateway && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run test/unit",
     "test:watch": "vitest",

@@ -40,19 +40,6 @@ To switch backends, just change the `service` name and redeploy:
 - `service = "my-api"` - Use your own API Worker
 - `service = "httpbin"` - Use httpbin clone
 
-### Path Filtering
-
-By default, logs all `/api/*` requests except:
-- `/api/health` - Health checks
-- `/api/metrics` - Monitoring endpoints  
-- `/api/static/*` - Static assets
-
-Configure in `wrangler.toml`:
-```toml
-[vars]
-SKIP_PATHS = "/api/health,/api/metrics,/api/static"
-```
-
 ## Deployment
 
 ```bash
@@ -72,9 +59,6 @@ wrangler deploy
 curl https://api-gateway.jsherron-test-account.workers.dev/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{"name":"test","email":"test@example.com"}'
-
-# This request is forwarded but NOT logged (health check)
-curl https://api-gateway.jsherron-test-account.workers.dev/api/health
 
 # View logs
 wrangler tail api-gateway
@@ -103,8 +87,7 @@ wrangler deploy
   "method": "POST",
   "headers": {...},
   "bodyPreview": "{\"name\":\"test\"...",
-  "bodyLength": 45,
-  "logged": true
+  "bodyLength": 45
 }
 ```
 
