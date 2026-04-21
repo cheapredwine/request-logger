@@ -76,8 +76,12 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = crypto.randomUUID();
 
-    // Capture and log (async, non-blocking)
-    ctx.waitUntil(captureAndLog(request, requestId, env));
+    // CRITICAL: Capture request data BEFORE returning response
+    // The request body stream closes once we send the response
+    const logEntry = await captureRequest(request, env, requestId);
+
+    // Process logging asynchronously (don't block response)
+    ctx.waitUntil(processLogEntry(logEntry, requestId, env));
 
     // Forward to upstream or return success
     if (env.UPSTREAM_URL) {
@@ -90,13 +94,12 @@ export default {
   },
 };
 
-async function captureAndLog(
-  request: Request,
+async function processLogEntry(
+  logEntry: LogEntry,
   requestId: string,
   env: Env
 ): Promise<void> {
   try {
-    const logEntry = await captureRequest(request, env, requestId);
     stats.captured++;
 
     const mode = env.SIEM_STREAMING_MODE || 'buffer';
