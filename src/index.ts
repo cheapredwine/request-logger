@@ -101,14 +101,22 @@ async function captureAndLog(
 
     const mode = env.SIEM_STREAMING_MODE || 'buffer';
 
-    if (mode === 'stream' && env.SIEM_ENDPOINT) {
-      // Mode 1: Stream to SIEM immediately
-      // PROS: Minimal loss window (~ms), reliable delivery (if SIEM up)
-      // CONS: Adds latency to request, requires SIEM to be available
-      const success = await sendToSIEM(logEntry, env);
-      if (!success) {
-        stats.dropped++;
-        console.error(`[DROPPED][${requestId}] SIEM send failed - log lost`);
+    if (mode === 'stream') {
+      if (env.SIEM_ENDPOINT) {
+        // Mode 1: Stream to SIEM immediately
+        // PROS: Minimal loss window (~ms), reliable delivery (if SIEM up)
+        // CONS: Adds latency to request, requires SIEM to be available
+        const success = await sendToSIEM(logEntry, env);
+        if (!success) {
+          stats.dropped++;
+          console.error(`[DROPPED][${requestId}] SIEM send failed - log lost`);
+        }
+      } else {
+        // DRY RUN: No SIEM endpoint configured - log what WOULD be sent
+        // This is useful for testing/debugging without a real SIEM
+        const payload = await prepareSIEMPayload(logEntry, env);
+        console.log(`[SIEM STUB][${requestId}] Would send to SIEM:`);
+        console.log(payload);
       }
     } else {
       // Mode 2: Buffer in memory, flush periodically
@@ -120,6 +128,28 @@ async function captureAndLog(
     console.error(`[${requestId}] Logging error:`, error);
     stats.dropped++;
   }
+}
+
+/**
+ * Prepare payload for SIEM (for dry-run mode)
+ */
+async function prepareSIEMPayload(logEntry: LogEntry, env: Env): Promise<string> {
+  let payload = JSON.stringify(logEntry);
+
+  // Encrypt if enabled
+  if (env.ENABLE_ENCRYPTION === 'true') {
+    if (env.ENCRYPTION_MODE === 'inline' && env.ENCRYPTION_PUBLIC_KEY) {
+      try {
+        const encrypted = await hybridEncrypt(payload, env.ENCRYPTION_PUBLIC_KEY);
+        payload = JSON.stringify(encrypted);
+      } catch (error) {
+        console.error('Encryption failed:', error);
+        // Fall back to plaintext
+      }
+    }
+  }
+
+  return payload;
 }
 
 async function captureRequest(
