@@ -2,7 +2,12 @@
 
 ## Project Overview
 
-A Cloudflare Workers-based request logger that captures inbound HTTP request headers and body previews with zero persistent storage. Data is streamed immediately to a SIEM or logged to console (dry-run mode).
+This repository contains **two** Cloudflare Workers for request logging:
+
+1. **request-logger** - Standalone logging endpoint with optional upstream forwarding
+2. **api-gateway** - Transparent gateway that intercepts and logs requests
+
+Both use **zero persistent storage** - data is kept in memory only and streamed to SIEM or logged to console.
 
 **Key Characteristics:**
 - **Zero storage**: Memory-only, never touches disk/KV
@@ -12,13 +17,45 @@ A Cloudflare Workers-based request logger that captures inbound HTTP request hea
 
 ## Architecture
 
+### Request Logger (Standalone)
 ```
-Client Request → Capture (sync) → Process (async) → SIEM/Console
-                     ↓
-               Return Response (immediate)
+Client → request-logger.workers.dev → Capture → [LOGGED] → Optional Upstream
 ```
 
-**Important**: Request body must be captured synchronously before returning the response, as the stream closes afterward.
+Use this when you can change the client URL or need a dedicated logging endpoint.
+
+### API Gateway (Transparent)
+```
+Client → gateway.yourdomain.com/* → Capture → [LOGGED] → Backend (service binding)
+```
+
+Use this when you want transparent interception without client changes.
+
+## Project Structure
+
+```
+.
+├── request-logger/         # Standalone logging worker
+│   ├── src/
+│   │   ├── index.ts
+│   │   └── encryption-worker.ts
+│   ├── test/
+│   ├── wrangler.toml
+│   └── README.md
+├── api-gateway/            # Transparent gateway worker
+│   ├── src/
+│   │   └── index.ts
+│   ├── wrangler.toml
+│   └── README.md
+├── scripts/                # Shared utilities
+│   ├── generate-traffic.js
+│   └── test-live.js
+├── package.json            # Root package.json
+├── tsconfig.json
+├── vitest.config.ts
+├── AGENTS.md               # This file
+└── README.md               # Root overview
+```
 
 ## Quick Start
 
@@ -32,92 +69,82 @@ Client Request → Capture (sync) → Process (async) → SIEM/Console
 npm install
 ```
 
-### Development
+### Deploy Request Logger (Standalone)
 ```bash
-# Local development
-npm run dev
-
-# In another terminal, watch logs
-wrangler tail
-
-# Run tests
-npm test
-npm run test:live
-
-# Demo the live worker
-npm run demo
-```
-
-### Deployment
-```bash
-# Deploy to Cloudflare
+cd request-logger
 wrangler deploy
-
-# Verify deployment
-npm run demo
 ```
 
-## Project Structure
-
+### Deploy API Gateway (Transparent)
+```bash
+cd api-gateway
+wrangler deploy
 ```
-.
-├── src/
-│   ├── index.ts              # Main worker - captures and logs requests
-│   └── encryption-worker.ts  # Optional service-based encryption
-├── test/
-│   ├── unit/                 # Unit tests (Vitest)
-│   └── integration/          # Live integration tests
-├── scripts/
-│   ├── generate-traffic.js   # Generate load for testing
-│   └── test-live.js          # On-demand demo/testing script
-├── AGENTS.md                 # This file
-├── README.md                 # User documentation
-├── package.json
-├── tsconfig.json
-├── vitest.config.ts
-└── wrangler.toml             # Worker configuration
+
+Or from root:
+```bash
+npm run deploy:logger   # Deploy request-logger
+npm run deploy:gateway  # Deploy api-gateway
 ```
 
 ## Configuration
 
-### wrangler.toml
+### Request Logger
 
-Key settings:
+Key settings in `request-logger/wrangler.toml`:
 ```toml
 [vars]
-UPSTREAM_URL = ""                    # Where to forward requests (optional)
+UPSTREAM_URL = ""                    # Where to forward (optional)
 MAX_BODY_BYTES = "400"               # Bytes of body to capture
 SIEM_STREAMING_MODE = "stream"       # "stream" or "buffer"
 ENABLE_ENCRYPTION = "false"          # Enable encryption
-ENCRYPTION_MODE = "inline"           # "inline" or "service"
+```
+
+### API Gateway
+
+Key settings in `api-gateway/wrangler.toml`:
+```toml
+# Custom domain - automatically creates DNS record
+[[routes]]
+pattern = "gateway.yourdomain.com"
+custom_domain = true
+
+# Service binding to backend
+[[services]]
+binding = "BACKEND"
+service = "flarebin"  # Change to your backend service
+
+[vars]
+MAX_BODY_BYTES = "400"
+SIEM_STREAMING_MODE = "stream"
 ```
 
 ### Secrets (via `wrangler secret put`)
 
-- `SIEM_ENDPOINT`: Where to send logs (optional for dry-run mode)
+For either worker:
+- `SIEM_ENDPOINT`: Where to send logs (optional for dry-run)
 - `SIEM_API_KEY`: Auth token for SIEM (optional)
-- `ENCRYPTION_PUBLIC_KEY`: RSA public key for encryption (required if encryption enabled)
+- `ENCRYPTION_PUBLIC_KEY`: RSA public key (required if encryption enabled)
 
 ## Testing
 
-### Unit Tests
+### Unit Tests (request-logger)
 ```bash
 npm test
 ```
-Tests the worker logic in isolation using Vitest + Cloudflare Workers pool.
 
 ### Live Tests
 ```bash
-# Test the deployed worker
+# Test request-logger
 npm run test:live
 
-# Or set custom URL
+# Or with custom URL
 WORKER_URL=https://your-worker.workers.dev npm run test:live
 ```
 
 ### Demo/On-Demand Testing
 ```bash
-# Quick demo of the live worker
+# Quick demo
 npm run demo
 
 # Generate traffic
@@ -125,17 +152,27 @@ node scripts/generate-traffic.js -u https://your-worker.workers.dev -c 100
 ```
 
 ### Manual Testing
+
+**Request Logger:**
 ```bash
-# Start dev server
+cd request-logger
 wrangler dev
 
-# Send test request
+# In another terminal
 curl -X POST http://localhost:8787/test \
   -H "Content-Type: application/json" \
   -d '{"test":"data"}'
+```
 
-# Watch logs
-wrangler tail
+**API Gateway:**
+```bash
+cd api-gateway
+wrangler dev
+
+# Test via workers.dev subdomain
+curl https://api-gateway.your-account.workers.dev/api/test \
+  -H "Content-Type: application/json" \
+  -d '{"test":"data"}'
 ```
 
 ## Encryption
@@ -174,18 +211,18 @@ Use the private key to decrypt:
 
 ### Add New Features
 1. Write tests first (TDD)
-2. Implement in `src/index.ts`
+2. Implement in the appropriate worker directory
 3. Run `npm run typecheck` to verify types
 4. Run `npm test` to verify unit tests
-5. Deploy with `wrangler deploy`
+5. Deploy with `npm run deploy:logger` or `npm run deploy:gateway`
 6. Run `npm run demo` to verify live
 
 ## Development Workflow
 
-1. **Make changes** to `src/index.ts`
+1. **Make changes** in the appropriate worker directory
 2. **Type check**: `npm run typecheck`
 3. **Unit test**: `npm test`
-4. **Deploy**: `wrangler deploy`
+4. **Deploy**: `npm run deploy:logger` or `npm run deploy:gateway`
 5. **Live test**: `npm run demo`
 6. **Commit**: Follow conventional commits (feat:, fix:, docs:, etc.)
 
@@ -211,8 +248,14 @@ This means the body was accessed after the response was sent. The fix is to capt
 - Check endpoint is accessible from Cloudflare's network
 - Look for `[SIEM ERROR]` in logs
 
+### API Gateway custom domain not working
+- DNS record should be created automatically with `custom_domain = true`
+- If not, check SSL/TLS settings in Cloudflare dashboard
+- Ensure the zone is orange-clouded
+
 ## Links
 
 - Repository: https://github.com/cheapredwine/request-logger
-- Deployed Worker: https://request-logger.jsherron-test-account.workers.dev
+- Request Logger: https://request-logger.jsherron-test-account.workers.dev
+- API Gateway: https://api-gateway.jsherron-test-account.workers.dev
 - Cloudflare Dashboard: https://dash.cloudflare.com
