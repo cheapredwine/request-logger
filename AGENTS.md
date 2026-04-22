@@ -222,6 +222,27 @@ Use the private key to decrypt:
 ### Before Committing ANY Changes
 
 **Required steps for api-gateway:**
+
+```bash
+# Make changes to api-gateway
+cd api-gateway
+# ... edit code ...
+
+# Deploy and validate (REQUIRED before commit)
+npm run deploy:gateway
+npm run validate:gateway
+
+# Or run all checks at once
+npm run precommit
+
+# Then commit
+git commit -m "feat: your changes"
+```
+
+The validation ensures the live deployment actually works before you commit!
+
+### Detailed Steps
+
 ```bash
 # 1. Make your changes to api-gateway/src/index.ts
 
