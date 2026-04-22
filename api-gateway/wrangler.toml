@@ -4,11 +4,11 @@ compatibility_date = "2024-04-23"
 compatibility_flags = ["nodejs_compat"]
 account_id = "1ddebf6f9507d3fc9052158be9d42dee"
 
-# Custom Domain: Creates DNS record automatically
-# This points ALL paths of gateway.jsherron.com to this Worker
+# Route: All gateway.jsherron.com traffic EXCEPT /api/* (configured in dashboard)
+# The /api/* route is handled by cf-demo Worker (configured in Cloudflare dashboard)
+# This route catches everything else: gateway.jsherron.com/*
 [[routes]]
-pattern = "gateway.jsherron.com"
-custom_domain = true
+pattern = "gateway.jsherron.com/*"
 zone_name = "jsherron.com"
 
 # Service binding to backend service
