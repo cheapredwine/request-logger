@@ -49,7 +49,8 @@ Use this when you want transparent interception without client changes.
 │   └── README.md
 ├── scripts/                # Shared utilities
 │   ├── generate-traffic.js
-│   └── test-live.js
+│   ├── test-live.js
+│   └── validate-deployment.js
 ├── package.json            # Root package.json
 ├── tsconfig.json
 ├── vitest.config.ts
@@ -149,6 +150,10 @@ npm run demo
 
 # Generate traffic
 node scripts/generate-traffic.js -u https://your-worker.workers.dev -c 100
+
+# Validate api-gateway deployment
+npm run validate:gateway       # Test custom domain
+npm run validate:gateway:dev   # Test workers.dev
 ```
 
 ### Manual Testing
