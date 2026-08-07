@@ -4,76 +4,102 @@
  * Transparently intercepts requests and logs them.
  * Forwards to a configurable backend via service binding.
  *
- * Architecture:
- * Client → gateway.jsherron.com/api/v2/products?id=123 → This Worker → [LOGGED]
- *                                                              ↓
- *                                                    Service Binding
- *                                                              ↓
- *                                            Backend (/api/v2/products?id=123)
- *                                                              ↓
- *                                                     [Response]
- *                                                              ↓
- *                                                       [RETURNED]
+ * Features:
+ * - Request capture with body preview
+ * - Circular in-memory buffer
+ * - Real-time streaming via WebSocket + SSE
+ * - SIEM streaming mode
+ * - Service binding proxy to backend
+ * - Hybrid encryption
  */
 
-export interface Env {
-  // Service binding to backend
-  // Change wrangler.toml [[services]] to point to different backends
-  BACKEND: Fetcher;
+import type { LogEntry } from '../../shared/types';
+import { LogBuffer } from '../../shared/buffer';
+import { captureRequest } from '../../shared/capture';
+import { createWebSocketStream, createSSEStream } from '../../shared/streaming';
+import { hybridEncrypt } from '../../shared/crypto';
 
-  // Configuration
+export interface Env {
+  BACKEND: Fetcher;
   MAX_BODY_BYTES: string;
   SIEM_STREAMING_MODE: string;
   SIEM_ENDPOINT?: string;
   SIEM_API_KEY?: string;
-
-  // Encryption
   ENABLE_ENCRYPTION: string;
   ENCRYPTION_MODE: string;
   ENCRYPTION_PUBLIC_KEY?: string;
+  MAX_BUFFER_SIZE?: string;
 }
 
-export interface LogEntry {
-  timestamp: string;
-  requestId: string;
-  originalUrl: string;
-  forwardedTo: string;
-  method: string;
-  headers: Record<string, string>;
-  bodyPreview: string;
-  bodyLength: number;
-}
+const logBuffer = new LogBuffer();
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
     const requestId = crypto.randomUUID();
 
-    // Capture request data BEFORE any async operations
-    // (Service binding fetch is async, so we must capture first)
-    const logEntry = await captureRequest(request, env, requestId);
+    // Streaming endpoints
+    if (url.pathname === '/stream/ws') {
+      const { response } = createWebSocketStream(logBuffer, {
+        enableEncryption: env.ENABLE_ENCRYPTION === 'true',
+        publicKey: env.ENCRYPTION_PUBLIC_KEY,
+      });
+      return response;
+    }
 
-    // Log asynchronously
-    ctx.waitUntil(processLogEntry(logEntry, requestId, env));
+    if (url.pathname === '/stream/sse') {
+      return createSSEStream(logBuffer, {
+        enableEncryption: env.ENABLE_ENCRYPTION === 'true',
+        publicKey: env.ENCRYPTION_PUBLIC_KEY,
+      });
+    }
 
-    // Forward to configured backend
+    // Health check
+    if (url.pathname === '/health') {
+      return new Response(
+        JSON.stringify({
+          status: 'ok',
+          bufferSize: logBuffer.size(),
+          maxBufferSize: parseInt(env.MAX_BUFFER_SIZE ?? '1000', 10),
+          encryptionEnabled: env.ENABLE_ENCRYPTION === 'true',
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Clear buffer
+    if (url.pathname === '/clear' && request.method === 'POST') {
+      logBuffer.clear();
+      return new Response(
+        JSON.stringify({ message: 'Buffer cleared' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Default: capture, log, forward to backend
+    const maxBytes = parseInt(env.MAX_BODY_BYTES || '4000', 10);
+    const logEntry = await captureRequest(request, maxBytes, requestId);
+
+    // Add gateway-specific fields
+    const gatewayEntry: LogEntry = {
+      ...logEntry,
+      originalUrl: request.url,
+      forwardedTo: `backend:${url.pathname}${url.search}`,
+    };
+
+    ctx.waitUntil(processLogEntry(gatewayEntry, requestId, env));
+
     const backendResponse = await forwardToBackend(request, env, requestId);
     return backendResponse;
   },
 };
 
-/**
- * Forward request to configured backend via service binding
- * Preserves the original path and query string
- */
 async function forwardToBackend(
   request: Request,
   env: Env,
-  requestId: string
+  requestId: string,
 ): Promise<Response> {
   const url = new URL(request.url);
-  
-  // Preserve the full original path and query string
-  // Just change the origin to the backend service
   const backendUrl = `http://internal${url.pathname}${url.search}`;
 
   const backendRequest = new Request(backendUrl, request);
@@ -86,67 +112,19 @@ async function forwardToBackend(
     console.error(`[${requestId}] Error forwarding to backend:`, error);
     return new Response(
       JSON.stringify({ error: 'Gateway error', requestId }),
-      { status: 502, headers: { 'Content-Type': 'application/json' } }
+      { status: 502, headers: { 'Content-Type': 'application/json' } },
     );
   }
-}
-
-async function captureRequest(
-  request: Request,
-  env: Env,
-  requestId: string
-): Promise<LogEntry> {
-  const url = new URL(request.url);
-  const maxBytes = parseInt(env.MAX_BODY_BYTES || '400', 10);
-
-  // Capture headers
-  const headers: Record<string, string> = {};
-  request.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
-
-  // Capture body preview
-  let bodyPreview = '';
-  let bodyLength = 0;
-
-  try {
-    const clonedRequest = request.clone();
-    const bodyBuffer = await clonedRequest.arrayBuffer();
-    bodyLength = bodyBuffer.byteLength;
-    const previewBuffer = bodyBuffer.slice(0, maxBytes);
-
-    try {
-      const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
-      bodyPreview = decoder.decode(previewBuffer);
-    } catch {
-      bodyPreview = `[BASE64]: ${btoa(String.fromCharCode(...new Uint8Array(previewBuffer)))}`;
-    }
-
-    if (bodyLength > maxBytes) {
-      bodyPreview += `... [truncated, total: ${bodyLength} bytes]`;
-    }
-  } catch (error) {
-    bodyPreview = `[Error reading body: ${error}]`;
-  }
-
-  return {
-    timestamp: new Date().toISOString(),
-    requestId,
-    originalUrl: request.url,
-    forwardedTo: `backend:${url.pathname}${url.search}`,
-    method: request.method,
-    headers,
-    bodyPreview,
-    bodyLength,
-  };
 }
 
 async function processLogEntry(
   logEntry: LogEntry,
   requestId: string,
-  env: Env
+  env: Env,
 ): Promise<void> {
   try {
+    logBuffer.add(logEntry);
+
     const mode = env.SIEM_STREAMING_MODE || 'buffer';
 
     if (mode === 'stream') {
@@ -156,12 +134,9 @@ async function processLogEntry(
           console.error(`[DROPPED][${requestId}] SIEM send failed`);
         }
       } else {
-        // Dry-run mode
-        const payload = await prepareSIEMPayload(logEntry, env);
-        console.log(`[GATEWAY LOG][${requestId}] ${payload}`);
+        console.log(`[GATEWAY LOG][${requestId}] ${JSON.stringify(logEntry)}`);
       }
     } else {
-      // Buffer mode - just log to console
       console.log(`[GATEWAY LOG][${requestId}] ${JSON.stringify(logEntry)}`);
     }
   } catch (error) {
@@ -172,10 +147,13 @@ async function processLogEntry(
 async function sendToSIEM(logEntry: LogEntry, env: Env): Promise<boolean> {
   let payload = JSON.stringify(logEntry);
 
-  // Encrypt if enabled
   if (env.ENABLE_ENCRYPTION === 'true' && env.ENCRYPTION_PUBLIC_KEY) {
-    // Encryption implementation would go here
-    console.log(`[ENCRYPTION] Encryption requested but not implemented in gateway`);
+    try {
+      const encrypted = await hybridEncrypt(payload, env.ENCRYPTION_PUBLIC_KEY);
+      payload = JSON.stringify(encrypted);
+    } catch {
+      console.log('[ENCRYPTION] Encryption requested but failed, sending plaintext');
+    }
   }
 
   try {
@@ -183,25 +161,13 @@ async function sendToSIEM(logEntry: LogEntry, env: Env): Promise<boolean> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(env.SIEM_API_KEY && { 'Authorization': `Bearer ${env.SIEM_API_KEY}` }),
+        ...(env.SIEM_API_KEY && { Authorization: `Bearer ${env.SIEM_API_KEY}` }),
       },
       body: payload,
     });
-
     return response.ok;
   } catch (error) {
     console.error(`[SIEM ERROR] ${error}`);
     return false;
   }
-}
-
-async function prepareSIEMPayload(logEntry: LogEntry, env: Env): Promise<string> {
-  let payload = JSON.stringify(logEntry);
-
-  // Add encryption here if needed
-  if (env.ENABLE_ENCRYPTION === 'true') {
-    // Encryption logic
-  }
-
-  return payload;
 }

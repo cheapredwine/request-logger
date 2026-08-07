@@ -1,44 +1,78 @@
 # Request Logger
 
-Cloudflare Workers-based request logging with zero persistent storage.
+Cloudflare Workers-based request logging with zero persistent storage. Two deployment modes: standalone logging endpoint and transparent API gateway.
+
+**Merged from `cf-request-logger` (v2.0.0)**: Now includes real-time WebSocket + SSE streaming, circular in-memory buffer, web UI, and Cloudflare metadata capture alongside the existing SIEM streaming, encryption, and transparent gateway features.
+
+## Features
+
+- **Two Deployment Modes**
+  - `request-logger`: Standalone logging endpoint with optional upstream forwarding
+  - `api-gateway`: Transparent gateway that intercepts and logs via service binding
+- **Real-Time Streaming**: WebSocket (`/stream/ws`) and SSE (`/stream/sse`) for live log viewing
+- **In-Memory Buffer**: Circular buffer with configurable max size (default 1000 entries)
+- **SIEM Integration**: Stream logs immediately to external SIEM or buffer to console
+- **Encryption**: Hybrid RSA-OAEP + AES-GCM (inline or service-binding mode)
+- **Web UI**: Dark-themed live log viewer at `public/client.html`
+- **Zero Persistence**: All data in memory only, lost on worker restart
 
 ## Project Structure
 
 ```
 .
-├── request-logger/      # Standalone request logger worker
+├── request-logger/      # Standalone logging endpoint
 │   ├── src/
+│   │   └── index.ts
 │   ├── wrangler.toml
 │   └── README.md
 ├── api-gateway/         # Transparent gateway with logging
 │   ├── src/
+│   │   └── index.ts
 │   ├── wrangler.toml
 │   └── README.md
-├── scripts/             # Shared scripts (traffic generator, demo)
-├── test/               # Shared tests
-├── package.json        # Root package with scripts
-└── AGENTS.md           # Detailed project documentation
+├── shared/              # Shared modules (types, buffer, crypto, streaming, capture)
+├── public/
+│   └── client.html      # Web UI for live log streaming
+├── scripts/             # Traffic generator, demo, validation
+├── test/               # Unit and integration tests
+├── package.json
+├── tsconfig.json
+└── AGENTS.md
 ```
 
 ## Quick Start
 
 ### Request Logger (Standalone)
-Deploy as a standalone logging endpoint:
 ```bash
 cd request-logger
 wrangler deploy
 ```
 
-See [request-logger/README.md](request-logger/README.md) for details.
-
 ### API Gateway (Transparent)
-Deploy as a transparent gateway that intercepts and logs:
 ```bash
 cd api-gateway
 wrangler deploy
 ```
 
-See [api-gateway/README.md](api-gateway/README.md) for details.
+### Streaming Endpoints (Both Workers)
+
+**WebSocket:**
+```javascript
+const ws = new WebSocket('wss://your-worker.workers.dev/stream/ws');
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === 'log') console.log('New log:', msg.data);
+};
+```
+
+**SSE:**
+```javascript
+const es = new EventSource('https://your-worker.workers.dev/stream/sse');
+es.addEventListener('log', (e) => console.log('Log:', JSON.parse(e.data)));
+```
+
+### Web UI
+Open `public/client.html` in a browser pointed at your worker domain, or serve it locally.
 
 ## Shared Scripts
 
@@ -51,6 +85,9 @@ npm run demo
 
 # Run tests
 npm test
+
+# Full validation before commit
+npm run precommit
 ```
 
 ## License

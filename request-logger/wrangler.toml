@@ -13,7 +13,8 @@ account_id = "[removed]"
 UPSTREAM_URL = ""
 
 # Logging configuration
-MAX_BODY_BYTES = "400"
+MAX_BODY_BYTES = "4000"
+MAX_BUFFER_SIZE = "1000"
 
 # Streaming mode: 'stream' (send immediately) or 'buffer' (batch to console)
 # RECOMMENDED: 'stream' for production (lower data loss)

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CF Request Logger - Live Stream</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      color: #58a6ff;
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #238636;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #2ea043;
+    }
+
+    button:disabled {
+      background: #30363d;
+      cursor: not-allowed;
+    }
+
+    button.disconnect {
+      background: #da3633;
+    }
+
+    button.disconnect:hover {
+      background: #f85149;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status.connected {
+      background: #238636;
+      color: white;
+    }
+
+    .status.disconnected {
+      background: #30363d;
+      color: #8b949e;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .stats {
+      display: flex;
+      gap: 20px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #8b949e;
+    }
+
+    .stats span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .log-container {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .log-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .clear-btn {
+      background: transparent;
+      color: #8b949e;
+      border: 1px solid #30363d;
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+
+    .clear-btn:hover {
+      background: #30363d;
+      color: #c9d1d9;
+    }
+
+    .log-entries {
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .log-entry {
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .log-entry:hover {
+      border-color: #58a6ff;
+    }
+
+    .log-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: #21262d;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .log-entry-method {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .method-get { background: #1f6feb; }
+    .method-post { background: #238636; }
+    .method-put { background: #9e6a03; }
+    .method-delete { background: #da3633; }
+    .method-patch { background: #8957e5; }
+    .method-default { background: #6e7681; }
+
+    .log-entry-url {
+      flex: 1;
+      margin: 0 12px;
+      font-size: 13px;
+      color: #c9d1d9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-entry-time {
+      font-size: 12px;
+      color: #8b949e;
+      font-family: monospace;
+    }
+
+    .log-entry-toggle {
+      font-size: 12px;
+      color: #8b949e;
+      margin-left: 8px;
+    }
+
+    .log-entry-body {
+      display: none;
+      padding: 12px;
+      background: #0d1117;
+      border-top: 1px solid #30363d;
+    }
+
+    .log-entry-body.expanded {
+      display: block;
+    }
+
+    .log-section {
+      margin-bottom: 16px;
+    }
+
+    .log-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .log-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .log-section-content {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 12px;
+      background: #161b22;
+      padding: 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #c9d1d9;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #8b949e;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .filter-input {
+      flex: 1;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .filter-input:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    .method-filter {
+      display: flex;
+      gap: 6px;
+    }
+
+    .method-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .method-btn.active {
+      background: #58a6ff;
+      border-color: #58a6ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔍 CF Request Logger</h1>
+      <div class="controls">
+        <button id="connectBtn" onclick="connect()">Connect WebSocket</button>
+        <button id="disconnectBtn" class="disconnect" onclick="disconnect()" disabled>Disconnect</button>
+        <span id="status" class="status disconnected">
+          <span class="status-dot"></span>
+          <span id="statusText">Disconnected</span>
+        </span>
+      </div>
+      <div class="stats">
+        <span>📦 <strong id="bufferSize">0</strong> buffered</span>
+        <span>📡 <strong id="receivedCount">0</strong> received</span>
+        <span>🔓 <strong id="encryptionStatus">No</strong> encryption</span>
+      </div>
+    </header>
+
+    <div class="filter-bar">
+      <input type="text" class="filter-input" id="filterInput" placeholder="Filter by URL, method, or headers..." oninput="filterLogs()">
+      <div class="method-filter">
+        <button class="method-btn" data-method="GET" onclick="toggleMethodFilter(this)">GET</button>
+        <button class="method-btn" data-method="POST" onclick="toggleMethodFilter(this)">POST</button>
+        <button class="method-btn" data-method="PUT" onclick="toggleMethodFilter(this)">PUT</button>
+        <button class="method-btn" data-method="DELETE" onclick="toggleMethodFilter(this)">DELETE</button>
+      </div>
+    </div>
+
+    <div class="log-container">
+      <div class="log-header">
+        <span class="log-title">📋 Log Entries</span>
+        <button class="clear-btn" onclick="clearLogs()">Clear</button>
+      </div>
+      <div class="log-entries" id="logEntries">
+        <div class="empty-state">
+          <div class="empty-state-icon">📭</div>
+          <p>No logs yet. Click "Connect WebSocket" to start streaming.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let logs = [];
+    let activeFilters = new Set();
+    let textFilter = '';
+
+    function updateStatus(connected, text) {
+      const status = document.getElementById('status');
+      const statusText = document.getElementById('statusText');
+      const connectBtn = document.getElementById('connectBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+
+      if (connected) {
+        status.className = 'status connected';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+      } else {
+        status.className = 'status disconnected';
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+      }
+      statusText.textContent = text;
+    }
+
+    function connect() {
+      if (ws) return;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/stream/ws`;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        updateStatus(true, 'Connected');
+        console.log('WebSocket connected');
+      };
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        handleMessage(message);
+      };
+
+      ws.onclose = () => {
+        updateStatus(false, 'Disconnected');
+        ws = null;
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        updateStatus(false, 'Error');
+      };
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    function handleMessage(message) {
+      if (message.type === 'history') {
+        // Initial history
+        logs = message.data;
+        document.getElementById('bufferSize').textContent = logs.length;
+      } else if (message.type === 'log') {
+        // New log entry
+        logs.push(message.data);
+        document.getElementById('receivedCount').textContent = logs.length;
+      }
+
+      // Check if encrypted
+      if (message.data && message.data.encrypted) {
+        document.getElementById('encryptionStatus').textContent = 'Yes';
+      }
+
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const container = document.getElementById('logEntries');
+      const filtered = getFilteredLogs();
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>${logs.length === 0 ? 'No logs yet. Start making requests!' : 'No logs match your filters.'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map((entry, index) => {
+        const data = entry.encrypted ? { id: 'encrypted', method: '???', url: '[Encrypted - implement decryption]', timestamp: Date.now(), headers: {}, bodyPreview: '' } : entry;
+        const methodClass = `method-${data.method.toLowerCase()}`;
+        const time = new Date(data.timestamp).toLocaleTimeString();
+
+        return `
+          <div class="log-entry" data-index="${logs.indexOf(entry)}">
+            <div class="log-entry-header" onclick="toggleEntry(this)">
+              <span class="log-entry-method ${methodClass}">${data.method}</span>
+              <span class="log-entry-url">${escapeHtml(data.url)}</span>
+              <span class="log-entry-time">${time}</span>
+              <span class="log-entry-toggle">▼</span>
+            </div>
+            <div class="log-entry-body">
+              <div class="log-section">
+                <div class="log-section-title">Request ID</div>
+                <div class="log-section-content">${data.id}</div>
+              </div>
+              <div class="log-section">
+                <div class="log-section-title">Headers</div>
+                <div class="log-section-content">${formatHeaders(data.headers)}</div>
+              </div>
+              <div class="log-section">
+                <div class="log-section-title">Body Preview (${data.bodyPreview?.length || 0} chars)</div>
+                <div class="log-section-content">${escapeHtml(data.bodyPreview || '') || '(empty body)'}</div>
+              </div>
+              ${data.cf ? `
+              <div class="log-section">
+                <div class="log-section-title">Cloudflare Data</div>
+                <div class="log-section-content">${formatCf(data.cf)}</div>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).reverse().join('');
+    }
+
+    function getFilteredLogs() {
+      return logs.filter(entry => {
+        const data = entry.encrypted ? null : entry;
+        if (!data) return false;
+
+        // Method filter
+        if (activeFilters.size > 0 && !activeFilters.has(data.method)) {
+          return false;
+        }
+
+        // Text filter
+        if (textFilter) {
+          const searchText = textFilter.toLowerCase();
+          const urlMatch = data.url.toLowerCase().includes(searchText);
+          const methodMatch = data.method.toLowerCase().includes(searchText);
+          const headerMatch = Object.entries(data.headers).some(
+            ([k, v]) => k.toLowerCase().includes(searchText) || v.toLowerCase().includes(searchText)
+          );
+          if (!urlMatch && !methodMatch && !headerMatch) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+    }
+
+    function toggleEntry(header) {
+      const body = header.nextElementSibling;
+      const toggle = header.querySelector('.log-entry-toggle');
+      body.classList.toggle('expanded');
+      toggle.textContent = body.classList.contains('expanded') ? '▲' : '▼';
+    }
+
+    function toggleMethodFilter(btn) {
+      const method = btn.dataset.method;
+      btn.classList.toggle('active');
+      if (btn.classList.contains('active')) {
+        activeFilters.add(method);
+      } else {
+        activeFilters.delete(method);
+      }
+      renderLogs();
+    }
+
+    function filterLogs() {
+      textFilter = document.getElementById('filterInput').value;
+      renderLogs();
+    }
+
+    function clearLogs() {
+      logs = [];
+      document.getElementById('receivedCount').textContent = '0';
+      renderLogs();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatHeaders(headers) {
+      return Object.entries(headers)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n') || '(no headers)';
+    }
+
+    function formatCf(cf) {
+      return Object.entries(cf)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n');
+    }
+
+    // Auto-connect on load
+    window.onload = () => {
+      connect();
+    };
+
+    // Poll health endpoint for buffer stats
+    setInterval(async () => {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        document.getElementById('bufferSize').textContent = data.bufferSize;
+      } catch (err) {
+        // Ignore
+      }
+    }, 5000);
+  </script>
+</body>
+</html>

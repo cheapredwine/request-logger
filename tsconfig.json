@@ -12,6 +12,7 @@
     "types": ["@cloudflare/workers-types"]
   },
   "include": [
+    "shared/**/*",
     "request-logger/src/**/*",
     "api-gateway/src/**/*"
   ]

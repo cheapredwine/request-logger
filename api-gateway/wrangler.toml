@@ -19,7 +19,8 @@ service = "flarebin"  # Change this to your target service name
 
 [vars]
 # Logging configuration
-MAX_BODY_BYTES = "400"
+MAX_BODY_BYTES = "4000"
+MAX_BUFFER_SIZE = "1000"
 SIEM_STREAMING_MODE = "stream"
 
 # Encryption (optional)

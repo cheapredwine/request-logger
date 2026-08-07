@@ -1,7 +1,7 @@
 {
   "name": "request-logger",
-  "version": "1.0.0",
-  "description": "Cloudflare Workers request logging with zero persistent storage",
+  "version": "2.0.0",
+  "description": "Cloudflare Workers request logging with zero persistent storage - standalone endpoint and transparent gateway with real-time streaming",
   "scripts": {
     "dev:logger": "cd request-logger && wrangler dev",
     "dev:gateway": "cd api-gateway && wrangler dev",
