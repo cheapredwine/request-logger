@@ -1,5 +1,10 @@
 # Request Logger
 
+> ⚠️ **NOT OFFICIAL CLOUDFLARE.** Not affiliated with or endorsed by Cloudflare, Inc.
+> NO WARRANTIES, EXPRESS OR IMPLIED. Effectively untested demo code — read everything
+> and dry-run before you run. You assume all risk. See [DISCLAIMER.md](./DISCLAIMER.md).
+
+
 Cloudflare Workers-based request logging with zero persistent storage. Two deployment modes: standalone logging endpoint and transparent API gateway.
 
 **Merged from `cf-request-logger` (v2.0.0)**: Now includes real-time WebSocket + SSE streaming, circular in-memory buffer, web UI, and Cloudflare metadata capture alongside the existing SIEM streaming, encryption, and transparent gateway features.
